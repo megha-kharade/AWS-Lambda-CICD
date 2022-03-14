@@ -1,0 +1,31 @@
+version: 0.2
+env:
+  variables:
+    FOLDER_SELECTOR: 'S3'
+
+phases:
+
+  pre_build:
+    commands:
+      - echo "Removing cached terraform modules."
+      - rm -Rf .terraform
+      - echo "Initialiasing terraform"
+      - terraform -chdir=$FOLDER_SELECTOR init -no-color 
+      - echo "Validating terraform code."
+      - terraform -chdir=$FOLDER_SELECTOR validate -no-color
+
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo "Running a terraform plan on $FOLDER_SELECTOR"
+      - mkdir -p $FOLDER_SELECTOR/plans
+      - touch $FOLDER_SELECTOR/plans/$FOLDER_SELECTOR.plan
+      - terraform -chdir=$FOLDER_SELECTOR plan -parallelism=30 -input=false -out plans/$FOLDER_SELECTOR.plan -var-file="terraform.tfvars" -refresh=true
+      - echo "Plan created"
+
+  post_build:
+    commands:
+      - echo "Deploying the infrastructure"
+      - terraform -chdir=$FOLDER_SELECTOR apply -no-color -input=false -auto-approve plans/$FOLDER_SELECTOR.plan
+      - aws s3 sync $FOLDER_SELECTOR s3://as1506-static-website/ --exclude "*" --include "*.html"
+      - echo "Deployment is completed"
